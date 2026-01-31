@@ -12,6 +12,7 @@
     "dist",
     "bin",
     "agents",
+    "commands",
     "templates",
     "plugin"
   ],

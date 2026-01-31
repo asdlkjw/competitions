@@ -543,6 +543,32 @@ bunx opencode-competition --version
 
 ---
 
+## Slash Commands
+
+설치 후 OpenCode에서 사용 가능한 커맨드:
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/loop <target>` | 목표까지 반복 실험 | `/loop cv 0.85` |
+| `/stop` | 루프 중단 | `/stop` |
+| `/status` | 현재 상태 확인 | `/status` |
+| `/experiment <hyp>` | 단일 실험 실행 | `/experiment Add target encoding` |
+
+```bash
+# Score 목표
+/loop cv 0.85
+/loop score > 0.9
+
+# Rank 목표
+/loop top10
+/loop 상위 5등
+
+# 단일 실험
+/experiment Higher max_depth for XGBoost
+```
+
+---
+
 ## Quick Reference
 
 ```bash
@@ -552,12 +578,11 @@ bunx opencode-competition install
 # 2. OpenCode 실행
 opencode
 
-# 3. Tab → comp_orch 선택
-
-# 4. URL 입력
+# 3-A. Single Run (URL만)
 https://www.kaggle.com/competitions/titanic
 
-# 5. 자동 실행 → submission.csv 생성!
+# 3-B. Loop Mode (목표까지 반복)
+/loop cv 0.85
 ```
 
 ---
