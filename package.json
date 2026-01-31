@@ -12,7 +12,8 @@
     "dist",
     "bin",
     "agents",
-    "templates"
+    "templates",
+    "plugin"
   ],
   "scripts": {
     "build": "tsc",

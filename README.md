@@ -471,6 +471,78 @@ bunx opencode-competition --version
 
 ---
 
+## Competition Loop Mode
+
+목표 점수/순위에 도달할 때까지 자동으로 반복 실험하는 모드입니다.
+
+### Activation
+
+```
+# Score target
+"cv 0.85 넘을 때까지 반복해"
+"until score > 0.9"
+
+# Rank target
+"top10 들어갈 때까지 진행해"
+"until top 5"
+
+# Open-ended
+"계속 개선해"
+```
+
+### Loop Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Iteration N                                                  │
+├─────────────────────────────────────────────────────────────┤
+│ 1. 📝 Hypothesis: "Target encoding will improve score"      │
+│ 2. 🔧 Execute: Apply changes, train models                  │
+│ 3. 📊 Measure: CV score = 0.8542                           │
+│ 4. 📈 Analyze: +0.0047 improvement, encoding worked         │
+│ 5. 💡 Learn: Continue this direction                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+      [Score improved?]               [Target reached?]
+              │                               │
+     ┌────────┴────────┐             ┌────────┴────────┐
+     │ YES             │ NO          │ YES             │ NO
+     ▼                 ▼             ▼                 ▼
+  Continue        Rollback &     🏆 DONE!        Next Iter
+  direction      try alternative
+```
+
+### Iteration Output
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 ITERATION 7 COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Hypothesis: "Higher max_depth for XGBoost"
+📊 Results: 0.8542 → 0.8589 (+0.55%) ✅ IMPROVED
+
+💡 Analysis:
+   - Tree depth increase helped capture patterns
+   - Watch for overfitting
+
+🔮 Next: Add regularization, try feature interactions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 Progress: 7/50 | Best: 0.8589 | Target: 0.8800
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Stop Commands
+
+```
+중단 / 멈춰 / stop / /stop / /cancel
+```
+
+---
+
 ## Quick Reference
 
 ```bash
