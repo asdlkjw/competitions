@@ -198,6 +198,7 @@ export async function install(options: InstallOptions = {}): Promise<void> {
   console.log(`  ${pc.cyan('/status')}            - Check loop status`);
   console.log(`  ${pc.cyan('/experiment')} ${pc.dim('<hyp>')} - Run single experiment`);
   console.log(`  ${pc.cyan('/dashboard')}         - Show full dashboard`);
+  console.log(`  ${pc.cyan('/usage')}             - Show subscription usage`);
 
   console.log(pc.dim('\n  Examples:'));
   console.log(pc.dim('    /loop cv 0.85'));

@@ -553,7 +553,8 @@ bunx opencode-competition --version
 | `/stop` | 루프 중단 | `/stop` |
 | `/status` | 현재 상태 확인 | `/status` |
 | `/experiment <hyp>` | 단일 실험 실행 | `/experiment Add target encoding` |
-| `/dashboard` | 전체 대시보드 표시 | `/dashboard` |
+| `/dashboard` | 경진대회 대시보드 | `/dashboard` |
+| `/usage` | 구독 사용량 표시 | `/usage` |
 
 ```bash
 # Score 목표
@@ -639,6 +640,85 @@ claude-dashboard 스타일의 실시간 경진대회 상태 대시보드입니�
 // 전체 상태표시줄
 🔄 LOOP │ Iter 7/50 │ Score 0.8542 │ Best 0.8589 │ 📈 Improving │ ⏱ 45m
 ```
+
+---
+
+## Subscription Usage
+
+AI 제공업체 구독 플랜 사용량을 실시간으로 추적합니다.
+
+### Supported Providers
+
+| Provider | Icon | Limits Tracked |
+|----------|------|----------------|
+| **Claude** | 🟣 | 5h limit, 7d limit (Max) |
+| **Codex/OpenAI** | 🟢 | RPM, TPM |
+| **Gemini** | 🔵 | RPM, Daily quota |
+| **GLM/ZHIPU** | 🟡 | Daily quota |
+
+### Usage View
+
+`/usage` 명령으로 전체 사용량 대시보드를 볼 수 있습니다:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📈 SUBSCRIPTION USAGE DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  🟣 Claude
+    Plan: MAX
+    5h Limit:  [███████░░░░░░░░░░░░░] 35%
+               65,000 / 100,000 tokens remaining
+               Resets in 2h 30m
+    7d Limit:  [██░░░░░░░░░░░░░░░░░░] 12%
+               Resets in 5d
+
+  🟢 Codex
+    Plan: PRO
+    RPM:       [█████████░░░░░░░░░░░] 45%
+               550 / 1000 requests remaining
+    TPM:       [██████░░░░░░░░░░░░░░] 28%
+               72K / 100K tokens remaining
+
+  🔵 Gemini
+    Plan: PRO
+    RPM:       [████░░░░░░░░░░░░░░░░] 20%
+    Daily:     [██░░░░░░░░░░░░░░░░░░] 8%
+               Resets in 16h
+
+  🟡 GLM
+    Plan: PRO
+    Daily:     [███░░░░░░░░░░░░░░░░░] 15%
+               85,000 / 100,000 remaining
+               Resets in 10h
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Compact Statusline
+
+CLI 입력창 하단에 표시되는 컴팩트 상태표시줄:
+
+```
+🟣35% 🟢45% 🔵20% 🟡15%
+```
+
+전체 상태표시줄:
+
+```
+🟣 Claude 5h: [███░░░░░░░] 35% (2h 30m) │ 7d: [█░░░░░░░] 12% (5d)
+🟢 Codex RPM: 550/1000 TPM: 72K/100K
+🔵 Gemini RPM: 20% Daily: 8% (16h)
+🟡 GLM Daily: 15% (10h)
+```
+
+### Color Coding
+
+사용량에 따른 색상 코딩:
+
+- 🟢 **Green**: 0-50% (안전)
+- 🟡 **Yellow**: 51-80% (주의)
+- 🔴 **Red**: 81-100% (위험)
 
 ---
 
