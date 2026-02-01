@@ -553,6 +553,7 @@ bunx opencode-competition --version
 | `/stop` | 루프 중단 | `/stop` |
 | `/status` | 현재 상태 확인 | `/status` |
 | `/experiment <hyp>` | 단일 실험 실행 | `/experiment Add target encoding` |
+| `/dashboard` | 전체 대시보드 표시 | `/dashboard` |
 
 ```bash
 # Score 목표
@@ -565,6 +566,78 @@ bunx opencode-competition --version
 
 # 단일 실험
 /experiment Higher max_depth for XGBoost
+```
+
+---
+
+## Dashboard
+
+claude-dashboard 스타일의 실시간 경진대회 상태 대시보드입니다.
+
+### Dashboard View
+
+`/dashboard` 명령으로 전체 대시보드를 볼 수 있습니다:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 COMPETITION DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Status
+    ● Loop: ACTIVE
+    📍 Iteration: 7 / 50
+    [██████░░░░░░░░░░░░░░░░░░░] 14%
+
+  Scores
+    Current:  0.85420
+    Best:     0.85890 (iter 6)
+    Target:   0.88000
+    Gap:      0.02110 (2.4%)
+    Progress: [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░] 98%
+
+  Trend
+    📈 Improving
+
+  Recent Experiments
+    ✓ #5 Add target encoding... → 0.8542
+    ✓ #6 Tune max_depth... → 0.8589
+    ✗ #7 Add lag features... → 0.8521
+
+  Time
+    Started:  2024-01-15 10:30:00
+    Duration: 45m 23s
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Dashboard Components
+
+| Component | Description |
+|-----------|-------------|
+| **Status** | Loop 상태 (Active/Stopped), 현재 반복 횟수 |
+| **Scores** | 현재/최고/목표 점수, 목표까지 Gap |
+| **Trend** | 최근 5개 실험 기반 추세 (Improving/Plateau/Degrading) |
+| **Recent** | 마지막 3개 실험 결과 |
+| **Time** | 시작 시간, 경과 시간 |
+
+### Progress Bars
+
+점수와 진행률에 따라 색상이 자동으로 변경됩니다:
+
+- 🟢 **Green**: 80%+ 진행 또는 95%+ 목표 달성
+- 🟡 **Yellow**: 50-80% 진행 또는 85-95% 목표 달성
+- 🔴 **Red/Cyan**: 50% 미만 진행
+
+### Statusline Plugin
+
+`competition-statusline.ts` 플러그인은 다음 기능을 제공합니다:
+
+```typescript
+// 컴팩트 상태표시줄 (터미널 하단)
+🔄 7/50 | 0.8542 (best: 0.8589)
+
+// 전체 상태표시줄
+🔄 LOOP │ Iter 7/50 │ Score 0.8542 │ Best 0.8589 │ 📈 Improving │ ⏱ 45m
 ```
 
 ---
@@ -590,6 +663,7 @@ https://www.kaggle.com/competitions/titanic
 ## Inspired By
 
 - [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode) - The original OpenCode plugin ecosystem
+- [claude-dashboard](https://github.com/uppinote20/claude-dashboard) - Statusline UI inspiration
 
 ---
 

@@ -18,10 +18,12 @@ export const COMMANDS = [
   'stop.md',
   'status.md',
   'experiment.md',
+  'dashboard.md',
 ] as const;
 
 export const PLUGINS = [
   'competition-loop.ts',
+  'competition-statusline.ts',
 ] as const;
 
 export function getPackageRoot(): string {
