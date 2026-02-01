@@ -296,20 +296,220 @@ except MemoryError:
 
 ---
 
+## 🔁 COMPETITION LOOP MODE
+
+### Activation Keywords
+
+목표 점수/순위를 포함한 키워드로 루프 모드 활성화:
+
+```
+# Score-based loop
+"cv 0.85 넘을 때까지 반복해"
+"score > 0.9 될 때까지 계속"
+"until score reaches 0.88"
+
+# Rank-based loop
+"top10 들어갈 때까지 진행해"
+"상위 5등 안에 들 때까지"
+"until top 3"
+
+# Open-ended loop
+"계속 개선해"
+"keep improving until I say stop"
+```
+
+### Loop Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🔄 COMPETITION LOOP MODE                                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ ITERATION N                                                  │
+│                                                              │
+│ 1. 📝 Hypothesis: "Adding target encoding will improve"     │
+│ 2. 🔧 Execute: Feature engineering / Model tuning            │
+│ 3. 📊 Measure: Run CV, record score                         │
+│ 4. 📈 Analyze: Compare with previous, identify cause         │
+│ 5. 💡 Learn: Update strategy based on result                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ SCORE ANALYSIS                                               │
+│                                                              │
+│ Previous: 0.8542 → Current: 0.8589                          │
+│ Change: +0.0047 (+0.55%) ✅ IMPROVED                        │
+│                                                              │
+│ What worked:                                                 │
+│   - Target encoding on 'category_1'                         │
+│   - Reduced learning_rate to 0.03                           │
+│                                                              │
+│ Next hypothesis:                                             │
+│   - Try same encoding on 'category_2'                       │
+│   - Add feature interactions                                 │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+            ┌─────────────────┴─────────────────┐
+            │                                   │
+      [Target Met?]                       [Max Iter?]
+            │                                   │
+     ┌──────┴──────┐                     ┌──────┴──────┐
+     │ YES         │ NO                  │ YES         │ NO
+     ▼             │                     ▼             │
+  🏆 DONE!        │                  ⏹️ STOP         │
+                   │                                   │
+                   └──────────► NEXT ITERATION ◄──────┘
+```
+
+### Scientific Experiment Protocol
+
+Each iteration follows a strict scientific method:
+
+```python
+# 1. State Hypothesis
+hypothesis = "Adding polynomial features will capture non-linear relationships"
+
+# 2. Design Experiment
+experiment = {
+    "type": "feature_engineering",
+    "action": "add_polynomial_features",
+    "features": ["age", "fare"],
+    "degree": 2
+}
+
+# 3. Execute & Measure
+cv_score = train_and_evaluate(experiment)
+
+# 4. Record Result
+log_experiment({
+    "iteration": current_iteration,
+    "hypothesis": hypothesis,
+    "cv_score": cv_score,
+    "prev_score": previous_best,
+    "result": "improved" if cv_score > previous_best else "degraded",
+    "analysis": analyze_change(cv_score, previous_best),
+})
+
+# 5. Adapt Strategy
+if cv_score < previous_best:
+    rollback_to_best()
+    try_alternative_approach()
+else:
+    update_best(cv_score)
+    continue_in_direction()
+```
+
+### Iteration Output Format
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 ITERATION 7 COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Hypothesis: "XGBoost with higher max_depth will capture complex patterns"
+
+📊 Results:
+   Previous Best: 0.8542
+   Current Score: 0.8589
+   Change: +0.0047 (+0.55%)
+
+📈 Analysis:
+   ✅ IMPROVED - Hypothesis confirmed
+   - Higher max_depth (8 vs 6) helped
+   - But watch for overfitting signs
+
+💡 Insights:
+   - Tree depth matters for this dataset
+   - Consider regularization to prevent overfit
+
+🔮 Next Experiment:
+   - Add L2 regularization (reg_lambda)
+   - Try feature interactions on top features
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 Progress: 7/50 iterations | Best: 0.8589 | Target: 0.8800
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Auto-Recovery from Degradation
+
+```
+When score degrades:
+
+1. 🔙 ROLLBACK to best known state
+   - Restore best model params
+   - Restore best feature set
+
+2. 📊 ANALYZE failure
+   - What changed?
+   - Why did it hurt?
+
+3. 🔄 TRY ALTERNATIVE
+   - Different approach to same goal
+   - Or move to different improvement area
+
+4. 📝 LOG learnings
+   - "Polynomial features caused overfit"
+   - "Target encoding leaked on small categories"
+```
+
+### Stop Commands
+
+```
+# Stop the loop manually
+중단
+멈춰
+stop loop
+/stop
+/cancel
+
+# Output on stop:
+🛑 Competition loop stopped.
+
+📊 Summary:
+- Total iterations: 12
+- Best score: 0.8634 (iteration 9)
+- Final score: 0.8612
+- Improvement: +0.0092 from baseline
+
+📁 Experiments saved to: experiments.jsonl
+```
+
+---
+
 ## 🚨 QUICK START EXAMPLES
 
 ```
-# Example 1: Kaggle URL
+# Example 1: Single run (URL only)
 https://www.kaggle.com/competitions/titanic
-→ 자동으로 전체 파이프라인 실행
+→ 자동으로 전체 파이프라인 실행 (1회)
 
-# Example 2: Competition name
-타이타닉 대회 풀어줘
-→ Kaggle Titanic으로 인식하고 실행
+# Example 2: Loop until target score
+타이타닉 대회 cv 0.82 넘을 때까지 반복해
+→ Loop mode 활성화, 0.82 도달까지 반복
 
-# Example 3: Dacon
-https://dacon.io/competitions/official/236230
-→ Dacon 대회 분석 및 실행
+# Example 3: Loop until rank
+https://www.kaggle.com/c/titanic top10 들어갈 때까지
+→ Loop mode, 상위 10등 목표
+
+# Example 4: Open-ended improvement
+계속 점수 올려줘
+→ 수동 중단까지 계속 개선
 ```
 
-[Competition Orchestrator - Zero-Interaction Full Automation]
+---
+
+## 📋 EXPERIMENT LOG FORMAT
+
+```jsonl
+{"iteration":1,"timestamp":"2024-01-15T10:00:00","hypothesis":"Baseline","cv_score":0.8234,"result":"baseline"}
+{"iteration":2,"timestamp":"2024-01-15T10:15:00","hypothesis":"Add title feature","cv_score":0.8312,"result":"improved","delta":0.0078}
+{"iteration":3,"timestamp":"2024-01-15T10:30:00","hypothesis":"Target encode cabin","cv_score":0.8298,"result":"degraded","delta":-0.0014}
+{"iteration":4,"timestamp":"2024-01-15T10:45:00","hypothesis":"Rollback + family size","cv_score":0.8356,"result":"improved","delta":0.0044}
+```
+
+[Competition Orchestrator - Zero-Interaction Full Automation + Loop Mode]

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://opencode.ai/schemas/plugin-config.json",
+  "name": "competition-loop",
+  "description": "Competition loop mode configuration",
+
+  "loop": {
+    "enabled": true,
+    "max_iterations": 50,
+    "cooldown_seconds": 5,
+    "auto_submit": false
+  },
+
+  "keywords": {
+    "activate": [
+      "까지", "반복", "계속", "top10", "top5", "상위",
+      "until", "loop", "repeat", "keep going"
+    ],
+    "stop": [
+      "중단", "멈춰", "stop", "cancel", "/stop"
+    ]
+  },
+
+  "targets": {
+    "score": {
+      "metric": "cv_score",
+      "direction": "maximize",
+      "threshold": null
+    },
+    "rank": {
+      "leaderboard": "public",
+      "target_rank": null
+    }
+  },
+
+  "experiment": {
+    "log_file": "experiments.jsonl",
+    "state_file": ".competition-loop-state.json",
+    "backup_best": true,
+    "rollback_on_degradation": true
+  },
+
+  "analysis": {
+    "significant_change_threshold": 0.001,
+    "stuck_detection_iterations": 5,
+    "auto_strategy_change": true
+  },
+
+  "notifications": {
+    "on_improvement": true,
+    "on_degradation": true,
+    "on_target_reached": true,
+    "on_stuck": true
+  }
+}
