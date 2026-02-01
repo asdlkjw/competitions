@@ -2,10 +2,10 @@
  * Subscription Usage Statusline Plugin for OpenCode
  *
  * Multi-provider subscription usage tracking:
- * - Claude (Anthropic) - 5h / 7d limits
- * - Codex (OpenAI) - Rate limits
- * - Gemini (Google) - RPM/TPM limits
- * - GLM (ZHIPU) - Usage quotas
+ * - Claude (Anthropic) - 5h / 7d limits via OAuth API
+ * - Codex (OpenAI) - Rate limits via ChatGPT backend API
+ * - Gemini (Google) - Quota via Code Assist API
+ * - GLM (ZHIPU/Z.ai) - Usage quotas via monitor API
  *
  * Reference: https://github.com/uppinote20/claude-dashboard
  */
@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { execSync } from 'child_process';
 import pc from 'picocolors';
 
 // ============================================================
@@ -33,9 +34,13 @@ interface ProviderUsage {
   fiveHour?: RateLimitData;
   sevenDay?: RateLimitData;
   sevenDaySonnet?: RateLimitData;
-  rpm?: RateLimitData;           // Requests per minute
-  tpm?: RateLimitData;           // Tokens per minute
-  daily?: RateLimitData;         // Daily limit
+  primaryWindow?: RateLimitData;   // Codex primary window
+  secondaryWindow?: RateLimitData; // Codex secondary window
+  rpm?: RateLimitData;             // Requests per minute
+  tpm?: RateLimitData;             // Tokens per minute
+  daily?: RateLimitData;           // Daily limit
+  tokensLimit?: RateLimitData;     // GLM tokens limit
+  timeLimit?: RateLimitData;       // GLM time limit
   lastUpdated: string;
   error?: string;
 }
@@ -53,12 +58,48 @@ interface StatuslineConfig {
 }
 
 // ============================================================
+// Auth Credential Types
+// ============================================================
+
+interface ClaudeCredentials {
+  oauth_token?: string;
+  accessToken?: string;
+}
+
+interface CodexCredentials {
+  accessToken: string;
+  accountId: string;
+}
+
+interface GeminiCredentials {
+  access_token: string;
+  refresh_token?: string;
+}
+
+interface GLMCredentials {
+  authToken: string;
+  baseUrl?: string;
+}
+
+// ============================================================
 // Constants
 // ============================================================
 
 const CACHE_DIR = join(homedir(), '.cache', 'opencode-competition');
 const CACHE_FILE = join(CACHE_DIR, 'usage-cache.json');
 const DEFAULT_TTL = 60; // seconds
+
+// Credential file paths
+const CLAUDE_CREDENTIALS_PATH = join(homedir(), '.claude', '.credentials.json');
+const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
+const GEMINI_OAUTH_PATH = join(homedir(), '.gemini', 'oauth_creds.json');
+const GLM_CONFIG_PATH = join(homedir(), '.glm', 'config.json');
+
+// API Endpoints
+const CLAUDE_USAGE_API = 'https://api.anthropic.com/api/oauth/usage';
+const CODEX_USAGE_API = 'https://chatgpt.com/backend-api/wham/usage';
+const GEMINI_CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
+const GLM_DEFAULT_BASE_URL = 'https://open.bigmodel.cn';
 
 const PROVIDER_ICONS: Record<string, string> = {
   claude: '🟣',
@@ -75,6 +116,8 @@ const DEFAULT_CONFIG: StatuslineConfig = {
   showTime: true,
   compact: false,
 };
+
+const PLUGIN_VERSION = '1.0.0';
 
 // ============================================================
 // Cache Management
@@ -110,106 +153,436 @@ function isCacheValid(provider: ProviderUsage, ttlSeconds: number): boolean {
 }
 
 // ============================================================
-// API Fetchers (Mock implementations - replace with real APIs)
+// Credential Loading
+// ============================================================
+
+function loadClaudeCredentials(): ClaudeCredentials | null {
+  // Try credentials file first
+  if (existsSync(CLAUDE_CREDENTIALS_PATH)) {
+    try {
+      const creds = JSON.parse(readFileSync(CLAUDE_CREDENTIALS_PATH, 'utf-8'));
+      if (creds.oauth_token || creds.accessToken) {
+        return creds;
+      }
+    } catch {}
+  }
+
+  // Try macOS keychain
+  if (process.platform === 'darwin') {
+    try {
+      const token = execSync(
+        'security find-generic-password -s "claude.ai" -w 2>/dev/null',
+        { encoding: 'utf-8' }
+      ).trim();
+      if (token) {
+        return { oauth_token: token };
+      }
+    } catch {}
+  }
+
+  // Try environment variable
+  const envToken = process.env.ANTHROPIC_AUTH_TOKEN;
+  if (envToken) {
+    return { oauth_token: envToken };
+  }
+
+  return null;
+}
+
+function loadCodexCredentials(): CodexCredentials | null {
+  if (existsSync(CODEX_AUTH_PATH)) {
+    try {
+      const auth = JSON.parse(readFileSync(CODEX_AUTH_PATH, 'utf-8'));
+      if (auth.accessToken && auth.accountId) {
+        return auth;
+      }
+    } catch {}
+  }
+
+  // Try environment variables
+  const accessToken = process.env.OPENAI_ACCESS_TOKEN;
+  const accountId = process.env.OPENAI_ACCOUNT_ID;
+  if (accessToken && accountId) {
+    return { accessToken, accountId };
+  }
+
+  return null;
+}
+
+function loadGeminiCredentials(): GeminiCredentials | null {
+  if (existsSync(GEMINI_OAUTH_PATH)) {
+    try {
+      const creds = JSON.parse(readFileSync(GEMINI_OAUTH_PATH, 'utf-8'));
+      if (creds.access_token) {
+        return creds;
+      }
+    } catch {}
+  }
+
+  // Try macOS keychain for Google OAuth
+  if (process.platform === 'darwin') {
+    try {
+      const token = execSync(
+        'security find-generic-password -s "gemini.google.com" -w 2>/dev/null',
+        { encoding: 'utf-8' }
+      ).trim();
+      if (token) {
+        return { access_token: token };
+      }
+    } catch {}
+  }
+
+  // Try environment variable
+  const envToken = process.env.GEMINI_ACCESS_TOKEN;
+  if (envToken) {
+    return { access_token: envToken };
+  }
+
+  return null;
+}
+
+function loadGLMCredentials(): GLMCredentials | null {
+  if (existsSync(GLM_CONFIG_PATH)) {
+    try {
+      const config = JSON.parse(readFileSync(GLM_CONFIG_PATH, 'utf-8'));
+      if (config.authToken || config.api_key) {
+        return {
+          authToken: config.authToken || config.api_key,
+          baseUrl: config.baseUrl || config.base_url,
+        };
+      }
+    } catch {}
+  }
+
+  // Try environment variables
+  const authToken = process.env.GLM_AUTH_TOKEN || process.env.ZHIPU_API_KEY;
+  if (authToken) {
+    return {
+      authToken,
+      baseUrl: process.env.GLM_BASE_URL,
+    };
+  }
+
+  return null;
+}
+
+// ============================================================
+// API Fetchers
 // ============================================================
 
 /**
  * Fetch Claude usage from Anthropic OAuth API
- * Real implementation would call: GET /oauth/usage
+ * Endpoint: https://api.anthropic.com/api/oauth/usage
  */
 async function fetchClaudeUsage(): Promise<ProviderUsage> {
-  // In real implementation, this would fetch from:
-  // https://api.anthropic.com/v1/oauth/usage
-  // Headers: Authorization: Bearer <oauth_token>
+  const creds = loadClaudeCredentials();
 
-  // Mock data for demonstration
-  // Replace with actual API call in production
-  const mockData: ProviderUsage = {
-    name: 'Claude',
-    icon: '🟣',
-    plan: 'max',
-    fiveHour: {
-      utilization: 35,
-      resetsAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-      remaining: 65000,
-      limit: 100000,
-    },
-    sevenDay: {
-      utilization: 12,
-      resetsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    lastUpdated: new Date().toISOString(),
-  };
+  if (!creds) {
+    return {
+      name: 'Claude',
+      icon: '🟣',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: 'No credentials found (~/.claude/.credentials.json)',
+    };
+  }
 
-  return mockData;
+  const token = creds.oauth_token || creds.accessToken;
+
+  try {
+    const response = await fetch(CLAUDE_USAGE_API, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': `opencode-competition/${PLUGIN_VERSION}`,
+        'Authorization': `Bearer ${token}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    const result: ProviderUsage = {
+      name: 'Claude',
+      icon: '🟣',
+      plan: data.plan || 'unknown',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Parse 5-hour limit
+    if (data.five_hour) {
+      result.fiveHour = {
+        utilization: Math.round(data.five_hour.utilization || 0),
+        resetsAt: data.five_hour.resets_at || new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
+      };
+    }
+
+    // Parse 7-day limit (Max plan only)
+    if (data.seven_day) {
+      result.sevenDay = {
+        utilization: Math.round(data.seven_day.utilization || 0),
+        resetsAt: data.seven_day.resets_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+      result.plan = 'max';
+    }
+
+    // Parse 7-day Sonnet limit (Max plan)
+    if (data.seven_day_sonnet) {
+      result.sevenDaySonnet = {
+        utilization: Math.round(data.seven_day_sonnet.utilization || 0),
+        resetsAt: data.seven_day_sonnet.resets_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      name: 'Claude',
+      icon: '🟣',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Failed to fetch',
+    };
+  }
 }
 
 /**
- * Fetch OpenAI/Codex usage
- * Real implementation would call organization usage API
+ * Fetch OpenAI/Codex usage from ChatGPT backend API
+ * Endpoint: https://chatgpt.com/backend-api/wham/usage
  */
 async function fetchCodexUsage(): Promise<ProviderUsage> {
-  // Mock data
-  return {
-    name: 'Codex',
-    icon: '🟢',
-    plan: 'pro',
-    rpm: {
-      utilization: 45,
-      resetsAt: new Date(Date.now() + 60 * 1000).toISOString(),
-      remaining: 550,
-      limit: 1000,
-    },
-    tpm: {
-      utilization: 28,
-      resetsAt: new Date(Date.now() + 60 * 1000).toISOString(),
-      remaining: 72000,
-      limit: 100000,
-    },
-    lastUpdated: new Date().toISOString(),
-  };
+  const creds = loadCodexCredentials();
+
+  if (!creds) {
+    return {
+      name: 'Codex',
+      icon: '🟢',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: 'No credentials found (~/.codex/auth.json)',
+    };
+  }
+
+  try {
+    const response = await fetch(CODEX_USAGE_API, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${creds.accessToken}`,
+        'ChatGPT-Account-Id': creds.accountId,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    const result: ProviderUsage = {
+      name: 'Codex',
+      icon: '🟢',
+      plan: data.plan || 'pro',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Parse rate limits
+    if (data.rate_limit) {
+      // Primary window (usually 3 hours)
+      if (data.rate_limit.primary_window) {
+        result.primaryWindow = {
+          utilization: Math.round(data.rate_limit.primary_window.used_percent || 0),
+          resetsAt: data.rate_limit.primary_window.reset_at || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+        };
+        // Map to fiveHour for compatibility
+        result.fiveHour = result.primaryWindow;
+      }
+
+      // Secondary window (usually 24 hours)
+      if (data.rate_limit.secondary_window) {
+        result.secondaryWindow = {
+          utilization: Math.round(data.rate_limit.secondary_window.used_percent || 0),
+          resetsAt: data.rate_limit.secondary_window.reset_at || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        };
+        // Map to daily for compatibility
+        result.daily = result.secondaryWindow;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      name: 'Codex',
+      icon: '🟢',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Failed to fetch',
+    };
+  }
 }
 
 /**
- * Fetch Gemini usage from Google AI API
+ * Fetch Gemini usage from Google Code Assist API
+ * Uses two-step process: loadCodeAssist -> retrieveUserQuota
  */
 async function fetchGeminiUsage(): Promise<ProviderUsage> {
-  // Mock data
-  return {
-    name: 'Gemini',
-    icon: '🔵',
-    plan: 'pro',
-    rpm: {
-      utilization: 20,
-      resetsAt: new Date(Date.now() + 60 * 1000).toISOString(),
-      remaining: 80,
-      limit: 100,
-    },
-    daily: {
-      utilization: 8,
-      resetsAt: new Date(Date.now() + 16 * 60 * 60 * 1000).toISOString(),
-    },
-    lastUpdated: new Date().toISOString(),
-  };
+  const creds = loadGeminiCredentials();
+
+  if (!creds) {
+    return {
+      name: 'Gemini',
+      icon: '🔵',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: 'No credentials found (~/.gemini/oauth_creds.json)',
+    };
+  }
+
+  try {
+    // Step 1: Load Code Assist to get project info
+    const loadResponse = await fetch(`${GEMINI_CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${creds.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!loadResponse.ok) {
+      throw new Error(`HTTP ${loadResponse.status}: ${loadResponse.statusText}`);
+    }
+
+    // Step 2: Retrieve user quota
+    const quotaResponse = await fetch(`${GEMINI_CODE_ASSIST_ENDPOINT}/v1internal:retrieveUserQuota`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${creds.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!quotaResponse.ok) {
+      throw new Error(`HTTP ${quotaResponse.status}: ${quotaResponse.statusText}`);
+    }
+
+    const data = await quotaResponse.json();
+
+    const result: ProviderUsage = {
+      name: 'Gemini',
+      icon: '🔵',
+      plan: 'pro',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Parse buckets
+    if (data.buckets && Array.isArray(data.buckets)) {
+      for (const bucket of data.buckets) {
+        const utilization = Math.round((1 - (bucket.remainingFraction || 0)) * 100);
+        const resetsAt = bucket.resetTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // Use first bucket as daily quota
+        if (!result.daily) {
+          result.daily = { utilization, resetsAt };
+        }
+      }
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      name: 'Gemini',
+      icon: '🔵',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Failed to fetch',
+    };
+  }
 }
 
 /**
- * Fetch GLM/ZHIPU usage
+ * Fetch GLM/ZHIPU usage from Z.ai monitor API
+ * Endpoint: {baseUrl}/api/monitor/usage/quota/limit
  */
 async function fetchGLMUsage(): Promise<ProviderUsage> {
-  // Mock data
-  return {
-    name: 'GLM',
-    icon: '🟡',
-    plan: 'pro',
-    daily: {
-      utilization: 15,
-      resetsAt: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
-      remaining: 85000,
-      limit: 100000,
-    },
-    lastUpdated: new Date().toISOString(),
-  };
+  const creds = loadGLMCredentials();
+
+  if (!creds) {
+    return {
+      name: 'GLM',
+      icon: '🟡',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: 'No credentials found (~/.glm/config.json or GLM_AUTH_TOKEN)',
+    };
+  }
+
+  const baseUrl = creds.baseUrl || GLM_DEFAULT_BASE_URL;
+
+  try {
+    const response = await fetch(`${baseUrl}/api/monitor/usage/quota/limit`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${creds.authToken}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    const result: ProviderUsage = {
+      name: 'GLM',
+      icon: '🟡',
+      plan: 'pro',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Parse limits from response
+    if (data.data && data.data.limits && Array.isArray(data.data.limits)) {
+      for (const limit of data.data.limits) {
+        const currentValue = limit.currentValue || 0;
+        const maxValue = limit.maxValue || 100;
+        const utilization = Math.round((currentValue / maxValue) * 100);
+        const resetsAt = limit.nextResetTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        if (limit.type === 'TOKENS_LIMIT') {
+          result.tokensLimit = {
+            utilization,
+            resetsAt,
+            remaining: maxValue - currentValue,
+            limit: maxValue,
+          };
+          // Map to daily for compatibility
+          result.daily = result.tokensLimit;
+        } else if (limit.type === 'TIME_LIMIT') {
+          result.timeLimit = {
+            utilization,
+            resetsAt,
+          };
+        }
+      }
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      name: 'GLM',
+      icon: '🟡',
+      plan: 'unknown',
+      lastUpdated: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Failed to fetch',
+    };
+  }
 }
 
 const FETCHERS: Record<string, () => Promise<ProviderUsage>> = {
@@ -272,7 +645,7 @@ function renderProviderUsage(
   // Provider icon and name
   parts.push(`${provider.icon} ${pc.bold(provider.name)}`);
 
-  // 5-hour limit (Claude)
+  // 5-hour limit (Claude, Codex primary window)
   if (provider.fiveHour) {
     const { utilization, resetsAt } = provider.fiveHour;
     const color = getColorForPercent(utilization);
@@ -304,37 +677,9 @@ function renderProviderUsage(
     }
   }
 
-  // RPM (Codex, Gemini)
-  if (provider.rpm) {
-    const { utilization, remaining, limit } = provider.rpm;
-    const color = getColorForPercent(utilization);
-
-    if (config.compact) {
-      parts.push(`RPM: ${color(`${utilization}%`)}`);
-    } else if (remaining !== undefined && limit !== undefined) {
-      parts.push(`RPM: ${color(`${remaining}/${limit}`)}`);
-    } else {
-      parts.push(`RPM: ${color(`${utilization}%`)}`);
-    }
-  }
-
-  // TPM (Codex)
-  if (provider.tpm) {
-    const { utilization, remaining, limit } = provider.tpm;
-    const color = getColorForPercent(utilization);
-
-    if (config.compact) {
-      parts.push(`TPM: ${color(`${utilization}%`)}`);
-    } else if (remaining !== undefined && limit !== undefined) {
-      const remK = Math.round(remaining / 1000);
-      const limK = Math.round(limit / 1000);
-      parts.push(`TPM: ${color(`${remK}K/${limK}K`)}`);
-    }
-  }
-
-  // Daily limit (Gemini, GLM)
+  // Daily limit (Gemini, GLM, Codex secondary window)
   if (provider.daily) {
-    const { utilization, resetsAt } = provider.daily;
+    const { utilization, resetsAt, remaining, limit } = provider.daily;
     const color = getColorForPercent(utilization);
 
     if (config.showBars) {
@@ -343,7 +688,7 @@ function renderProviderUsage(
       parts.push(`Daily: ${color(`${utilization}%`)}`);
     }
 
-    if (config.showTime) {
+    if (config.showTime && resetsAt) {
       parts.push(pc.dim(`(${formatTimeRemaining(resetsAt)})`));
     }
   }
@@ -386,7 +731,7 @@ export function renderCompactUsage(cache: UsageCache): string {
     let mainUsage = 0;
     if (provider.fiveHour) mainUsage = provider.fiveHour.utilization;
     else if (provider.daily) mainUsage = provider.daily.utilization;
-    else if (provider.rpm) mainUsage = provider.rpm.utilization;
+    else if (provider.sevenDay) mainUsage = provider.sevenDay.utilization;
 
     const color = getColorForPercent(mainUsage);
     parts.push(`${provider.icon}${color(`${mainUsage}%`)}`);
@@ -442,29 +787,15 @@ export function renderUsageDashboard(cache: UsageCache): string {
       lines.push(pc.dim(`               Resets in ${formatTimeRemaining(resetsAt)}`));
     }
 
-    // RPM
-    if (provider.rpm) {
-      const { utilization, remaining, limit, resetsAt } = provider.rpm;
+    // 7-day Sonnet limit
+    if (provider.sevenDaySonnet && provider.plan === 'max') {
+      const { utilization, resetsAt } = provider.sevenDaySonnet;
       const color = getColorForPercent(utilization);
-      lines.push(`    RPM:       ${createUsageBar(utilization, 20)} ${color(`${utilization}%`)}`);
-      if (remaining !== undefined && limit !== undefined) {
-        lines.push(pc.dim(`               ${remaining} / ${limit} requests remaining`));
-      }
+      lines.push(`    7d Sonnet: ${createUsageBar(utilization, 20)} ${color(`${utilization}%`)}`);
+      lines.push(pc.dim(`               Resets in ${formatTimeRemaining(resetsAt)}`));
     }
 
-    // TPM
-    if (provider.tpm) {
-      const { utilization, remaining, limit } = provider.tpm;
-      const color = getColorForPercent(utilization);
-      lines.push(`    TPM:       ${createUsageBar(utilization, 20)} ${color(`${utilization}%`)}`);
-      if (remaining !== undefined && limit !== undefined) {
-        const remK = Math.round(remaining / 1000);
-        const limK = Math.round(limit / 1000);
-        lines.push(pc.dim(`               ${remK}K / ${limK}K tokens remaining`));
-      }
-    }
-
-    // Daily
+    // Daily limit
     if (provider.daily) {
       const { utilization, resetsAt, remaining, limit } = provider.daily;
       const color = getColorForPercent(utilization);
@@ -472,7 +803,9 @@ export function renderUsageDashboard(cache: UsageCache): string {
       if (remaining !== undefined && limit !== undefined) {
         lines.push(pc.dim(`               ${remaining.toLocaleString()} / ${limit.toLocaleString()} remaining`));
       }
-      lines.push(pc.dim(`               Resets in ${formatTimeRemaining(resetsAt)}`));
+      if (resetsAt) {
+        lines.push(pc.dim(`               Resets in ${formatTimeRemaining(resetsAt)}`));
+      }
     }
 
     // Last updated
@@ -554,7 +887,7 @@ export default function subscriptionUsagePlugin(context: any) {
 
   return {
     name: 'subscription-usage',
-    version: '1.0.0',
+    version: PLUGIN_VERSION,
 
     statusline: {
       /**

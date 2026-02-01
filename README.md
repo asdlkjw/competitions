@@ -720,6 +720,77 @@ CLI 입력창 하단에 표시되는 컴팩트 상태표시줄:
 - 🟡 **Yellow**: 51-80% (주의)
 - 🔴 **Red**: 81-100% (위험)
 
+### Credential Configuration
+
+각 제공업체별 인증 설정 방법:
+
+#### Claude (Anthropic)
+```bash
+# 방법 1: 크레덴셜 파일 (자동 생성됨)
+~/.claude/.credentials.json
+
+# 방법 2: 환경 변수
+export ANTHROPIC_AUTH_TOKEN="your-oauth-token"
+
+# 방법 3: macOS Keychain (자동 감지)
+```
+
+**API Endpoint**: `https://api.anthropic.com/api/oauth/usage`
+
+#### Codex (OpenAI)
+```bash
+# 방법 1: 인증 파일
+~/.codex/auth.json
+# 내용:
+{
+  "accessToken": "your-access-token",
+  "accountId": "your-account-id"
+}
+
+# 방법 2: 환경 변수
+export OPENAI_ACCESS_TOKEN="your-access-token"
+export OPENAI_ACCOUNT_ID="your-account-id"
+```
+
+**API Endpoint**: `https://chatgpt.com/backend-api/wham/usage`
+
+#### Gemini (Google)
+```bash
+# 방법 1: OAuth 크레덴셜 파일
+~/.gemini/oauth_creds.json
+# 내용:
+{
+  "access_token": "your-access-token",
+  "refresh_token": "your-refresh-token"
+}
+
+# 방법 2: 환경 변수
+export GEMINI_ACCESS_TOKEN="your-access-token"
+
+# 방법 3: macOS Keychain (자동 감지)
+```
+
+**API Endpoint**: `https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota`
+
+#### GLM (ZHIPU/Z.ai)
+```bash
+# 방법 1: 설정 파일
+~/.glm/config.json
+# 내용:
+{
+  "authToken": "your-api-key",
+  "baseUrl": "https://open.bigmodel.cn"  # optional
+}
+
+# 방법 2: 환경 변수
+export GLM_AUTH_TOKEN="your-api-key"
+# 또는
+export ZHIPU_API_KEY="your-api-key"
+export GLM_BASE_URL="https://open.bigmodel.cn"  # optional
+```
+
+**API Endpoint**: `{baseUrl}/api/monitor/usage/quota/limit`
+
 ---
 
 ## Quick Reference
